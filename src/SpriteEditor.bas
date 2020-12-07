@@ -4,7 +4,7 @@
 ' this software is public domain.
 ' copy, enjoy or delete it.
 '
-' 2020-12-06
+' 2020-12-07
 '
 
 ' init pgm
@@ -239,10 +239,11 @@ dim integer LIBSTORE (LIB.MAX, SP.MAXX, SP.MAXY)  ' all library sprite data
 dim integer LIB.SPRITE.X (LIB.MAX)            ' x/y coordinates of sprites in library
 dim integer LIB.SPRITE.Y (LIB.MAX)
 
-const LIB.PX = 0                              ' start mapping pos of sprites
+const LIB.PX = 0                                ' start mapping pos of sprites
 const LIB.PY = 0
-dim string  LIB.FNAME = "SPRITE-LIB.DAT"      ' Filename of the Library
-DIM INTEGER LIB.CUR   = 0                     ' current Lib position/choosen sprite in editor
+dim string  LIB.FNAME     = "SPRITE-LIB.DAT"    ' Filename of the Library
+dim string  LIB.FNAMEexp  = "SPRITE-%02g.INC"   ' Filename of exported sprite data
+DIM INTEGER LIB.CUR       = 0                   ' current Lib position/choosen sprite in editor
 
 ' visibility of cursor in Library
 const LIBCURS.NONE      = 0
@@ -268,7 +269,7 @@ const LIBSTAT.H = 32
 const STATUS.X = ED.X + ED.W + 16
 const STATUS.Y = PAL.Y + PAL.h + 8
 const STATUS.W = PAL.w
-const STATUS.H = 2 * PAL.grid
+const STATUS.H = 2 * PAL.grid - 8
 const STATUS.MaxLen = 40
 dim string STATUS.msg1 = ""
 dim string STATUS.msg2 = ""
@@ -367,11 +368,12 @@ local integer x,y
   x = STATUS.X + 4
   y = STATUS.Y + 4
   box STATUS.X, STATUS.Y, STATUS.w, STATUS.h, 1, farb(screencolour), farb(screencolour)
-  Text x,y,    STATUS.msg1, "LMN",7
-  TEXT x,y+12, STATUS.msg2, "LMN",7
+  Text x,y +2, STATUS.msg1, "LMN",7
+  TEXT x,y+14, STATUS.msg2, "LMN",7
 end sub
 
 
+' ----------------------------------------
 sub doClearError
 
   STATUS.msg2 = ""
@@ -379,6 +381,8 @@ sub doClearError
   
 end sub
 
+
+' ----------------------------------------
 sub doError ( s as string)
 local string s1
 
@@ -395,6 +399,7 @@ local string s1
 end sub
 
 
+' ----------------------------------------
 sub doStatus ( s as string)
 local string s1
 
@@ -411,6 +416,7 @@ local string s1
 end sub
 
 
+' ----------------------------------------
 sub doStatusBox
 
   box STATUS.X - 1, STATUS.Y -1, STATUS.w + 2, STATUS.h + 2, 1, BOX.COLOUR
@@ -555,14 +561,53 @@ local integer i
 
   ' now output all sprite data
   for i=0 to LIB.MAX-1
-    for x=0 to SP.MAXX-1
-      for y=0 to SP.MAXY-1
+    doStatus("Save Library : "+str$(i))
+    for y=0 to SP.MAXX-1
+      for x=0 to SP.MAXY-1
         print #4, bin2str$(UINT64,LIBSTORE(i,x,y));
-      next y
-    next x
+      next x
+    next y
   next i
   close 4
 
+end sub
+
+
+' ----------------------------------------
+sub doExportSprite
+' export the current sprite as basic include file
+local string fn
+local integer x,y
+local integer i
+
+  fn = format$(LIB.cur, LIB.FnameExp)
+  open fn for output as #6
+    print #6, "' Sprite ";LIB.cur
+    print #6, format$(LIB.cur,"SPRITE%02g");"DATA:"
+    i=8
+    for y=0 to SP.MAXX-1
+      for x=0 to SP.MAXY-2
+        if i=8 then
+          print #6
+          print #6, "DATA ";
+          i=1
+        else
+          print #6, ",";
+          i=i+1
+        endif
+        print #6, "&H";hex$(LIBSTORE(LIB.cur,x,y),7);
+      next x
+      if (i=8) then
+        print #6
+        print #6,"DATA &H";hex$(LIBSTORE(LIB.cur,SP.MAXX-1,y),7)
+      else
+        print #6, ",";
+        print #6, "&H";hex$(LIBSTORE(LIB.cur,SP.MAXX-1,y),7);
+      endif
+      i=8
+    next y
+    print #6
+  close #6
 end sub
 
 
@@ -598,12 +643,12 @@ local string s
   ' now output all sprite data
   for LIB.cur=0 to LIB.MAX-1
     doStatus("Load Library : "+str$(LIB.cur))
-    for x=0 to SP.MAXX-1
-      for y=0 to SP.MAXY-1
+    for y=0 to SP.MAXX-1
+      for x=0 to SP.MAXY-1
         s = input$(8,#5)
         SP(x,y) = str2bin(UINT64,s)
-      next y
-    next x
+      next x
+    next y
     doRefreshPreview
     doSpritePut
     doDrawLibCursor(0)
@@ -1063,14 +1108,42 @@ sub doScreenColour(d as integer)
   if ScreenColour > Max.Colour then ScreenColour = Max.Colour
   
 end sub
+
+
+' ----------------------------------------
+sub doSpriteTest
+' move sprite around screen
+local integer x,i
+local integer x1,y1
+
+  x1 = LIB.SPRITE.x(LIB.cur)
+  y1 = LIB.SPRITE.y(LIB.cur)
+  
+  i=LIB.cur + 1
+  for x=MM.VRES\5 to 4*MM.VRES\5
+    sprite show i, x, x, 1
+    pause 20
+  next x
+  for x=MM.VRES\6 to 4*MM.VRES\5
+    sprite show i, x, MM.VRES\6, 1
+    pause 20
+  next x
+  for x=MM.VRES\5 to 5*MM.VRES\6
+    sprite show i, MM.VRES-x, MM.VRES-x, 1
+    pause 20
+  next x
   
   
+  sprite show i,x1,y1,1
   
+end sub
+
+
 '                                                                                            Palette
 ' ----------------------------------------
 sub doRefreshPalette
 local integer i,x,y
-  
+
   doDebug("Func: doRefreshPalette")
   
   for i=0 to MAX.Colour
@@ -1156,7 +1229,8 @@ local string crsr$ = chr$(146)+chr$(147)+chr$(148)+chr$(149)  ' cursor chars
   doLocate(x,y):         : print "ctrl 0..5"
   doLocate(x+10,y): y=y+1: print "select colour 10-15"
   
-  'doLocate(x,y): y=y+1: print "T          toggle preview bkgrd colour"
+  doLocate(x,y):           print "T"
+  doLocate(x+10,y): y=y+1: print "test sprite"
   
   doLocate(x,y):         : print "tab"
   doLocate(x+10,y): y=y+1: print "toggle active window"
@@ -1167,13 +1241,16 @@ local string crsr$ = chr$(146)+chr$(147)+chr$(148)+chr$(149)  ' cursor chars
   doLocate(x,y):         : print "G"
   doLocate(x+10,y): y=y+1: print "get sprite from library"
   
-  doLocate(x,y):         : print "S or F4"
+  doLocate(x,y):         : print "S"
   doLocate(x+10,y): y=y+1: print "save library"
   
-  doLocate(x,y):         : print "L or F5"
+  doLocate(x,y):         : print "L"
   doLocate(x+10,y): y=y+1: print "load library"
   
-  doLocate(x,y):    y=y+1: print ""
+  doLocate(x,y):         : print "F4"
+  doLocate(x+10,y): y=y+1: print "export current sprite"
+
+  'doLocate(x,y):    y=y+1: print ""
   ' F6/F7  export/import sprite as PNG
   font 1
   
@@ -1203,11 +1280,15 @@ local integer k
       doSpritePut
     case K_G
       doSpriteGet
-    case K_S, K_F4
+    case K_S
       doSaveLibrary
       ED.state = State.Redraw
+    case K_F4
+      doExportSprite
     case K_L, K_F5
       doLoadLibrary
+    case K_T
+      doSpriteTest
   end select
   
   '
@@ -1364,7 +1445,7 @@ local integer i
   LIB.SPRITE.y(LIB.cur) = y1
   i = LIB.cur + 1
   sprite read i, PRE.x,PRE.y, SP.MAXX, SP.MAXY, 1
-  sprite show 1, x1, y1, 1
+  sprite show i, x1, y1, 1
 
   ' copy sprite date to library
   for x=0 to SP.MAXX-1
